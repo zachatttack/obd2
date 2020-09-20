@@ -9,73 +9,33 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <time.h>
+#include <stdlib.h>
 
 void create_frame(struct can_frame *frame);
 
-void *read_can(void *vargp)
+void *read_can(void *i)
 {
+    int s = *((int *) i);
+    free(i);
 
-    int s,nbytes;
-    struct sockaddr_can addr;
-    struct ifreq ifr;
-
-    s = socket(PF_CAN, SOCK_RAW, CAN_RAW);
-
-    strcpy(ifr.ifr_name, "can0" );
-    ioctl(s, SIOCGIFINDEX, &ifr);
-
-    addr.can_family = AF_CAN;
-    addr.can_ifindex = ifr.ifr_ifindex;
-
-    bind(s, (struct sockaddr *)&addr, sizeof(addr));
-
+    int nbytes;
     struct can_frame frame;
 
-    struct can_filter rfilter[8];
-
-    rfilter[0].can_id   = 0x7E8;
-    rfilter[1].can_id   = 0x7E9;
-    rfilter[2].can_id   = 0x7EA;
-    rfilter[3].can_id   = 0x7EB;
-    rfilter[4].can_id   = 0x7EC;
-    rfilter[5].can_id   = 0x7ED;
-    rfilter[6].can_id   = 0x7EE;
-    rfilter[7].can_id   = 0x7EF;
-    for (int i=0;i<8;i++){
-    rfilter[i].can_mask = CAN_SFF_MASK;
-    }
-
-    setsockopt(s, SOL_CAN_RAW, CAN_RAW_FILTER, &rfilter, sizeof(rfilter));
-
     while(1){
-
         nbytes = read(s, &frame, sizeof(struct can_frame));
 
         printf("%0X ", frame.can_id);
-        for (int i=0; i < frame.can_dlc; i++){
-            printf("%02X ", frame.data[i]);
+        for (int j=0; j < frame.can_dlc; j++){
+            printf("%02X ", frame.data[j]);
         }
         printf("\n");
-
     }
-
 }
 
-void *write_can(void *vargp)
+void *write_can(void *i)
 {
-    int s;
-    struct sockaddr_can addr;
-    struct ifreq ifr;
-
-    s = socket(PF_CAN, SOCK_RAW, CAN_RAW);
-
-    strcpy(ifr.ifr_name, "can0" );
-    ioctl(s, SIOCGIFINDEX, &ifr);
-
-    addr.can_family = AF_CAN;
-    addr.can_ifindex = ifr.ifr_ifindex;
-
-    bind(s, (struct sockaddr *)&addr, sizeof(addr));
+    int s = *((int *) i);
+    free(i);
 
     struct can_frame frame;
 
@@ -93,17 +53,50 @@ void create_frame(struct can_frame *frame){
     memcpy(frame->data, data, sizeof(data));
 }
 
-void can_init(){
+int can_init(){
+    int s;
 
+    struct sockaddr_can addr;
+    struct ifreq ifr;
 
+    s = socket(PF_CAN, SOCK_RAW, CAN_RAW);
 
+    strcpy(ifr.ifr_name, "vcan0" );
+    ioctl(s, SIOCGIFINDEX, &ifr);
+
+    addr.can_family = AF_CAN;
+    addr.can_ifindex = ifr.ifr_ifindex;
+
+    bind(s, (struct sockaddr *)&addr, sizeof(addr));
+
+    struct can_filter rfilter[8];
+
+    rfilter[0].can_id   = 0x7E8;
+    rfilter[1].can_id   = 0x7E9;
+    rfilter[2].can_id   = 0x7EA;
+    rfilter[3].can_id   = 0x7EB;
+    rfilter[4].can_id   = 0x7EC;
+    rfilter[5].can_id   = 0x7ED;
+    rfilter[6].can_id   = 0x7EE;
+    rfilter[7].can_id   = 0x7EF;
+    for (int i=0;i<8;i++){
+    rfilter[i].can_mask = CAN_SFF_MASK;
+    }
+
+    setsockopt(s, SOL_CAN_RAW, CAN_RAW_FILTER, &rfilter, sizeof(rfilter));
+    return s;
 }
 
 int main(int argc, char **argv)
 {
+    int s = can_init();
+    int *arg = malloc(sizeof(*arg));
     pthread_t thread_id, thread_id2;
-    pthread_create(&thread_id, NULL, read_can, NULL);
-    pthread_create(&thread_id2, NULL, write_can, NULL);
+
+    *arg = s;
+    pthread_create(&thread_id, NULL, read_can, arg);
+    pthread_create(&thread_id2, NULL, write_can, arg);
+
     pthread_join(thread_id, NULL);
     pthread_join(thread_id2, NULL);
 
