@@ -8,6 +8,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <time.h>
 
 void create_frame(struct can_frame *frame);
 
@@ -20,7 +21,7 @@ void *read_can(void *vargp)
 
     s = socket(PF_CAN, SOCK_RAW, CAN_RAW);
 
-    strcpy(ifr.ifr_name, "vcan0" );
+    strcpy(ifr.ifr_name, "can0" );
     ioctl(s, SIOCGIFINDEX, &ifr);
 
     addr.can_family = AF_CAN;
@@ -28,7 +29,7 @@ void *read_can(void *vargp)
 
     bind(s, (struct sockaddr *)&addr, sizeof(addr));
 
-    struct can_frame frame_r, frame_w;
+    struct can_frame frame;
 
     struct can_filter rfilter[8];
 
@@ -48,11 +49,11 @@ void *read_can(void *vargp)
 
     while(1){
 
-        nbytes = read(s, &frame_r, sizeof(struct can_frame));
+        nbytes = read(s, &frame, sizeof(struct can_frame));
 
-        printf("%0X ", frame_r.can_id);
-        for (int i=0; i < frame_r.can_dlc; i++){
-            printf("%02X ", frame_r.data[i]);
+        printf("%0X ", frame.can_id);
+        for (int i=0; i < frame.can_dlc; i++){
+            printf("%02X ", frame.data[i]);
         }
         printf("\n");
 
@@ -62,13 +63,13 @@ void *read_can(void *vargp)
 
 void *write_can(void *vargp)
 {
-    int s,nbytes;
+    int s;
     struct sockaddr_can addr;
     struct ifreq ifr;
 
     s = socket(PF_CAN, SOCK_RAW, CAN_RAW);
 
-    strcpy(ifr.ifr_name, "vcan0" );
+    strcpy(ifr.ifr_name, "can0" );
     ioctl(s, SIOCGIFINDEX, &ifr);
 
     addr.can_family = AF_CAN;
@@ -76,35 +77,19 @@ void *write_can(void *vargp)
 
     bind(s, (struct sockaddr *)&addr, sizeof(addr));
 
-    struct can_frame frame_r, frame_w;
-
-    struct can_filter rfilter[8];
-
-    rfilter[0].can_id   = 0x7E8;
-    rfilter[1].can_id   = 0x7E9;
-    rfilter[2].can_id   = 0x7EA;
-    rfilter[3].can_id   = 0x7EB;
-    rfilter[4].can_id   = 0x7EC;
-    rfilter[5].can_id   = 0x7ED;
-    rfilter[6].can_id   = 0x7EE;
-    rfilter[7].can_id   = 0x7EF;
-    for (int i=0;i<9;i++){
-    rfilter[i].can_mask = CAN_SFF_MASK;
-    }
-
-    setsockopt(s, SOL_CAN_RAW, CAN_RAW_FILTER, &rfilter, sizeof(rfilter));
+    struct can_frame frame;
 
     while(1){
-
-        create_frame(&frame_w);
-        write(s, &frame_w, sizeof(struct can_frame));
+        create_frame(&frame);
+        write(s, &frame, sizeof(struct can_frame));
+        usleep(100000); //100ms
     }
 
 }
 void create_frame(struct can_frame *frame){
     frame->can_dlc = 8;
     frame->can_id = 0x7DF;
-    u_int8_t data[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xB, 0xEF};
+    u_int8_t data[] = {0x02, 0x01, 0x11, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC};
     memcpy(frame->data, data, sizeof(data));
 }
 
